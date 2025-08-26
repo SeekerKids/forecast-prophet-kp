@@ -32,6 +32,8 @@ def run():
     
     # Load data from the existing file
     df = event_utils.load_data(selected_sheet)
+    edited_df = df.copy()
+
     if not df.empty:
         edited_df = st.data_editor(
             df,
@@ -88,4 +90,5 @@ def run():
                     st.rerun()
             else:
                 st.warning("Mohon isi tanggal awal dan akhir dengan benar.")
+
 
