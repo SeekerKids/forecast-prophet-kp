@@ -6,6 +6,7 @@ prophet
 scikit-learn
 requests
 beautifulsoup4
-xlsxwriter
 openpyxl==3.1.2
+xlsxwriter
+
 
