@@ -7,4 +7,5 @@ scikit-learn
 requests
 beautifulsoup4
 xlsxwriter
-openpyxl
+openpyxl==3.1.2
+
