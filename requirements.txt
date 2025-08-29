@@ -2,7 +2,7 @@ streamlit
 pandas
 prophet
 pyodbc
-psycopg2
+psycopg2-binary
 numpy
 scikit-learn
 requests
@@ -11,3 +11,4 @@ openpyxl
 plotly
 statsmodels
 xlsxwriter
+
