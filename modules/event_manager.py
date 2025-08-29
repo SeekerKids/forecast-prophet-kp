@@ -6,7 +6,6 @@ from . import event_utils
 import os # Import the os module
 
 def run():
-    # current_year = datetime.now().year
     start_year = st.sidebar.number_input("Tahun Awal",  value=2015)
     end_year = st.sidebar.number_input("Tahun Akhir", min_value=start_year, value=2025)
     
@@ -15,6 +14,7 @@ def run():
         return False
     
     st.title("Aplikasi Pengelola Data Hari Libur & Event")
+    event_utils.last_update_excel()
     
     # Check if the file exists before creating it
     if not os.path.exists(event_utils.EVENTS_EXCEL_FILE):
@@ -90,5 +90,4 @@ def run():
                     st.rerun()
             else:
                 st.warning("Mohon isi tanggal awal dan akhir dengan benar.")
-
 

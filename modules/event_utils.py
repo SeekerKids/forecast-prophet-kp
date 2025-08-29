@@ -10,6 +10,15 @@ EVENTS_EXCEL_FILE = "events.xlsx"
 BASE_URL = "https://tanggalan.com/"
 MONTHS = ["januari", "februari", "maret", "april", "mei", "juni", "juli", "agustus", "september", "oktober", "november", "desember"]
 
+def last_update_excel():
+    if os.path.exists(EVENTS_EXCEL_FILE):
+        last_modified_time = os.path.getmtime(EVENTS_EXCEL_FILE)
+        last_modified_dt = datetime.fromtimestamp(last_modified_time)
+        st.markdown(f"**Terakhir diperbarui:** {last_modified_dt.strftime('%d %B %Y %H:%M:%S')}")
+    else:
+        st.warning("File events.xlsx tidak ditemukan. File akan dibuat saat pertama kali dijalankan.")
+
+
 def parse_holiday_range(range_str):
     '''
         PEMISAH RANGE SCRAPPING HARI LIBUR (15-17 CUTI BERSAMA IDUL FITRI)
@@ -98,6 +107,9 @@ def create_events_excel_file(start_year,end_year):
     ramadan_data_str = """
     2022-04-02,2022-05-01
     2023-03-22,2023-04-21
+    2024-03-10,2024-04-09
+    2025-03-01,2025-03-30
+    2026-02-17,2026-03-19
 
     """
     ramadan_data = [line.strip().split(',') for line in ramadan_data_str.strip().split('\n') if line.strip()]
@@ -109,6 +121,9 @@ def create_events_excel_file(start_year,end_year):
     2022-12-05,2022-12-09
     2023-06-12,2023-06-16
     2023-12-04,2023-12-08
+    2024-06-10,2024-06-14
+    2024-12-09,2024-12-13
+    2025-06-16,2025-06-20
 
     """
     ujian_data = [line.strip().split(',') for line in ujian_data_str.strip().split('\n') if line.strip()]
@@ -121,6 +136,9 @@ def create_events_excel_file(start_year,end_year):
         ujian_df.to_excel(writer, sheet_name='Ujian', index=False)
 
 def update_holidays_data(start_year,end_year):
+    '''
+        RE SCRAPING DARI WEBSITE
+    '''
         
     st.info(f"Mulai scraping hari libur dari tahun **{start_year}** hingga **{end_year}**...")
     new_holiday_data = [item for year in range(start_year, end_year + 1) for item in scrape_year(year)]
@@ -148,39 +166,6 @@ def update_holidays_data(start_year,end_year):
 
     return save_changes(final_df, sheet_name='Holidays', all_sheets=['Holidays', 'Ramadan', 'Ujian'])
     
-    # try:
-    #     excel_buffer = io.BytesIO()
-    #     with pd.ExcelWriter(excel_buffer, engine='xlsxwriter') as writer:
-    #         for sheet_name in ['Holidays', 'Ramadan', 'Ujian']:
-    #             if sheet_name == 'Holidays':
-    #                 final_df.to_excel(writer, sheet_name=sheet_name, index=False)
-    #             else:
-    #                 other_df = pd.read_excel(EVENTS_EXCEL_FILE, sheet_name=sheet_name)
-    #                 other_df.to_excel(writer, sheet_name=sheet_name, index=False)
-    #     with open(EVENTS_EXCEL_FILE, 'wb') as f:
-    #         f.write(excel_buffer.getbuffer())
-    #     st.success("✅ Data hari libur berhasil diperbarui!")
-    #     return True
-    # except Exception as e:
-    #     st.error(f"❌ Terjadi kesalahan saat menyimpan file: {e}")
-    #     return False
-def update_event_excel_file(final_df, excel_path, sheet_names=['Holidays', 'Ramadan', 'Ujian']):
-    try:
-        excel_buffer = io.BytesIO()
-        with pd.ExcelWriter(excel_buffer, engine='xlsxwriter') as writer:
-            for sheet_name in sheet_names:
-                if sheet_name == 'Holidays':
-                    final_df.to_excel(writer, sheet_name=sheet_name, index=False)
-                else:
-                    other_df = pd.read_excel(excel_path, sheet_name=sheet_name)
-                    other_df.to_excel(writer, sheet_name=sheet_name, index=False)
-        with open(excel_path, 'wb') as f:
-            f.write(excel_buffer.getbuffer())
-        st.success("✅ Data hari libur berhasil diperbarui!")
-        return True
-    except Exception as e:
-        st.error(f"❌ Terjadi kesalahan saat menyimpan file: {e}")
-        return False
 
 
 # @st.cache_data

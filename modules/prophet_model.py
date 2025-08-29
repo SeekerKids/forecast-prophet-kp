@@ -11,7 +11,7 @@ from . import db_utils
 import os
 
 warnings.filterwarnings("ignore")
-@st.cache_data
+# @st.cache_data
 def prepare_events_prophet(file):
     '''I.S. AMBIL EVENT DARI FILE (EXCEL)
         O.S DATAFRAME EVENT DENGAN LOWER & UPPER WINDOW
@@ -47,9 +47,10 @@ def prepare_events_prophet(file):
     except Exception as e: st.error(f"Gagal memuat sheet 'Ujian': {e}")
     holidays_df['lower_window'] = 0
     holidays_df['upper_window'] = 0
+
     return holidays_df, all_holiday_dates_set, all_ramadan_dates, all_ujian_dates
 
-@st.cache_data
+# @st.cache_data
 def prepare_data(df):
     '''
     FEATURE ENGINEERING UNTUK MODEL PROPHET
@@ -74,7 +75,7 @@ def prepare_data(df):
     prophet_df = prophet_df[['ds', 'y', 'IsHoliday', 'IsRamadan', 'IsUjian', 'day_of_week', 'month', 'year', 'weekend', 'libur']]
     return prophet_df, holidays_df, all_holiday_dates_set, all_ramadan_dates, all_ujian_dates
 
-def train_and_evaluate(prophet_df, holidays_df, pisah_tanggal, verbose=True):
+def train_and_evaluate(prophet_df, holidays_df, pisah_tanggal, verbose):
     split_date = pd.to_datetime(pisah_tanggal)
     train_df = prophet_df[prophet_df['ds'] < split_date]
     test_df = prophet_df[prophet_df['ds'] >= split_date]
@@ -109,7 +110,7 @@ def train_and_evaluate(prophet_df, holidays_df, pisah_tanggal, verbose=True):
         if verbose: st.warning("Data pengujian kosong. Tidak dapat melakukan evaluasi.")
     return model, test_df, rmse, r2, mape
 
-def predict_and_display(model, periods_to_forecast, all_holiday_dates_set, all_ramadan_dates, all_ujian_dates, pisah_tanggal,verbose=True):
+def predict_table(model, periods_to_forecast, all_holiday_dates_set, all_ramadan_dates, all_ujian_dates, pisah_tanggal,verbose):
     if verbose: st.subheader("Prediksi Masa Depan")
     with st.spinner(f"Membuat prediksi untuk {periods_to_forecast} hari..."):
         future = model.make_future_dataframe(periods=periods_to_forecast, freq='D', include_history=True)
@@ -129,16 +130,31 @@ def predict_and_display(model, periods_to_forecast, all_holiday_dates_set, all_r
             st.subheader("Komponen Prediksi")
             fig2 = model.plot_components(forecast)
             st.pyplot(fig2)
-            st.subheader("Tabel Prediksi")
+            # fig3 = model.train_holiday_names
+            # st.write(fig3)
+
             
         forecast_display_table = forecast[forecast['ds'] >= pisah_tanggal].copy()
         forecast_display_table = forecast_display_table[['ds', 'yhat', 'yhat_lower', 'yhat_upper']].copy()
         for col in ['yhat', 'yhat_lower', 'yhat_upper']:
             forecast_display_table[col] = forecast_display_table[col].apply(lambda x: int(round(x)) if pd.notna(x) else np.nan)
-        if verbose: st.dataframe(forecast_display_table)
+        forecast_display_table['yhat'] = forecast_display_table['yhat'].apply(lambda x: max(x, 0))
+        forecast_display_table['yhat_lower'] = forecast_display_table['yhat_lower'].apply(lambda x: max(x, 0))
     return forecast_display_table
 
 def display_charts(test_df, forecast_display_table):
+    st.subheader("Tabel Prediksi")
+    tabel = (forecast_display_table[['ds', 'yhat', 'yhat_lower', 'yhat_upper']]
+                .copy()
+                .reset_index(drop=True)
+                .rename(columns={
+                    'ds': 'Tanggal',
+                    'yhat': 'Prediksi',
+                    'yhat_lower': 'Batas Bawah',
+                    'yhat_upper': 'Batas Atas'
+                }) 
+            )     
+    st.dataframe(tabel)
     st.subheader("Perbandingan Aktual vs. Prediksi")
     if test_df is not None and not test_df.empty:
         # Perbandingan Actual vs. Test
@@ -168,36 +184,48 @@ def display_charts(test_df, forecast_display_table):
     st.line_chart(chart_df, color=["#0000FF"])
 
 
-def batch_predict_and_export_all_categories(db_name, start_date_str, end_date_str, periods_to_forecast,pisah_tanggal):
+def batch_predict_and_export_all_categories(db_name, branchid, branch_name, kategori_input, start_date_str, end_date_str, periods_to_forecast, pisah_tanggal, dbms):
     """
     Melakukan prediksi batch untuk semua kategori dan mengekspor hasilnya ke file Excel.
     """
     st.subheader("Proses Prediksi Batch")
     
-    # Create directory for database if it doesn't exist
-    output_folder = os.path.join(os.getcwd(), db_name)
+    # 1. Menentukan nama folder baru berdasarkan Branch ID dan Branch Name
+    if dbms == "SSMS":
+        branch_folder_name = f"{branchid}-{branch_name}"
+    elif dbms == "POSTGRES":
+        branch_folder_name = f"{branchid}"
+    # 2. Membuat path lengkap untuk folder output
+    # Path: current_directory/db_name/branchid|branch_name
+    output_folder = os.path.join(os.getcwd(), db_name, branch_folder_name)
+    
+    # 3. Membuat folder jika belum ada
     os.makedirs(output_folder, exist_ok=True)
     st.write(f"Menyimpan file ke folder: `{output_folder}`")
-
-    all_categories = db_utils.get_unique_categories(db_name, start_date_str, end_date_str)
     
+    if dbms == "SSMS":
+        all_categories = db_utils.get_unique_categories_ssms(db_name, start_date_str, end_date_str)
+    elif dbms == "POSTGRES":
+        all_categories = db_utils.get_unique_categories_postgres(start_date_str, end_date_str)
+
     if not all_categories:
-        st.error(f"Tidak ada kategori unik yang ditemukan dalam database '{db_name}' untuk rentang tanggal yang diberikan. Tidak dapat melakukan prediksi batch.")
-        return
+        st.info(f"Tidak ada kategori yang ditemukan yang memiliki data dari rentang {start_date_str} - {end_date_str} dari database. Menggunakan kategori input: '{kategori_input}' sebagai gantinya.")
+
+        all_categories = [kategori_input]      
 
     progress_bar = st.progress(0)
     status_text = st.empty()
     total_categories = len(all_categories)
-
     for i, category in enumerate(all_categories):
         status_text.text(f"Memproses kategori: {category} ({i+1}/{total_categories})")
         progress_bar.progress((i + 1) / total_categories)
 
         try:
-            # 1. Load Data
-            # df = prepare_data(db_name, category, start_date_str, end_date_str)
-            df = db_utils.load_data(db_name, category, start_date_str, end_date_str)
-
+            if dbms== "SSMS": 
+                df = db_utils.load_data_ssms(db_name, branchid, category, start_date_str, end_date_str)
+            elif dbms == "POSTGRES":
+                df = db_utils.load_data_postgres(branchid, category, start_date_str, end_date_str)
+            
             if df.empty:
                 st.warning(f"Tidak ada data untuk kategori '{category}'. Melanjutkan ke kategori berikutnya.")
                 continue
@@ -205,20 +233,20 @@ def batch_predict_and_export_all_categories(db_name, start_date_str, end_date_st
 
             # 2. Prepare Prophet Data
             prophet_df, holidays_df, all_holiday_dates_set, all_ramadan_dates, all_ujian_dates = prepare_data(df)
-            if prophet_df is None: # Check if data preparation failed
+            if prophet_df is None:
                 st.warning(f"Gagal mempersiapkan data untuk kategori '{category}'. Melanjutkan ke kategori berikutnya.")
                 continue
 
-            # 3. Train and Evaluate Prophet Model (silent mode for batch)
+            # 3. Train Model 
             model, _, rmse, r2, mape = train_and_evaluate(prophet_df, holidays_df,pisah_tanggal, verbose=False)
 
             if model is None:
                 st.warning(f"Gagal melatih model untuk kategori '{category}'. Melanjutkan ke kategori berikutnya.")
                 continue
 
-            # 4. Generate Future Predictions (get the full forecast)
-            forecast_full = predict_and_display(model, periods_to_forecast, all_holiday_dates_set, all_ramadan_dates, all_ujian_dates,pisah_tanggal,verbose=False)
-            # Prepare data for Excel export: filter for 2025 onwards, subset, and integer conversion
+            # 4. Future Predict
+            forecast_full = predict_table(model, periods_to_forecast, all_holiday_dates_set, all_ramadan_dates, all_ujian_dates,pisah_tanggal,verbose=False)
+            # Export
             forecast_for_excel = (
                 forecast_full[['ds', 'yhat', 'yhat_lower', 'yhat_upper']]
                 .copy()
@@ -237,11 +265,11 @@ def batch_predict_and_export_all_categories(db_name, start_date_str, end_date_st
                 st.warning(f"Tidak ada prediksi untuk tahun 2025 atau lebih untuk kategori '{category}'. Melewatkan ekspor.")
                 continue
 
-            # Get prediction start and end dates for filename from the filtered forecast
+            # Get prediction start dan end dates untuk nama file 
             pred_start_date = forecast_for_excel['Tanggal'].min().strftime("%Y%m%d")
             pred_end_date = forecast_for_excel['Tanggal'].max().strftime("%Y%m%d")
 
-            # Handle cases where R2 or MAPE might be None
+            # Handle R2 dan MAPE klo None
             r2_str = f"{r2:.2f}" if r2 is not None else "N/A"
             mape_str = f"{mape:.2f}" if mape is not None else "N/A"
 
